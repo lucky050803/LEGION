@@ -628,7 +628,6 @@ class App:
         else:
             self.print_in_terminal(f"Commande non reconnue : {command}")
        
-        
 
 
 # Fonction principale pour démarrer l'application
