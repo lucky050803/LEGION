@@ -39,6 +39,42 @@ def client_program(server_address,server_port):
     finally:
         client_socket.close()  # Fermer la connexion
 
+def print_in_terminal(output):
+    text_box.insert(tk.END, f"\n{output}\n")
+    text_box.see(tk.END)
+    
+    
+def handle_client_connection(conn, addr):
+    print_in_terminal(f"Connexion reçue de : {addr}")
+    # Demande d'acceptation de la connexion via l'interface
+    print_in_terminal("Accepter la connexion ? (y/n) : ")
+
+    # Attend la commande de l'utilisateur pour accepter ou refuser
+    def accept_connection():
+        command = text_box.get("end-1c linestart", "end-1c").strip()  # Récupère la dernière ligne de commande
+        if command.lower() == 'y':
+            conn.send("Connexion acceptée".encode('utf-8'))  # Encode la chaîne en UTF-8
+            print_in_terminal("Connexion acceptée. Vous êtes maintenant connectés.")
+        else:
+            conn.send("Connexion refusée".encode('utf-8'))  # Encode la chaîne en UTF-8
+            conn.close()
+            print_in_terminal("Connexion refusée.")
+        text_box.bind("<Return>", handle_command)  # Réactive l'écoute des commandes utilisateur
+
+    text_box.bind("<Return>", lambda event: accept_connection())
+
+    while True:
+        # Attendre des messages du client
+        message = conn.recv(1024).decode('utf-8')
+        if not message:
+            break
+        print_in_terminal(f"Message reçu: {message}")
+        # Répondre au client
+        response = input("Votre message : ")
+        conn.send(response.encode('utf-8'))
+
+    conn.close()
+
 
 # Fonction qui attend les connexions du client et les accepte
 def server_program():
@@ -46,35 +82,13 @@ def server_program():
     server_socket.bind(('0.0.0.0', 8080))  # Le serveur écoute sur toutes les interfaces sur le port 8080
     server_socket.listen(1)  # Le serveur écoute pour une connexion
 
-    print("En attente d'une connexion...")
-
-    # Accepter la connexion d'un client
-    conn, address = server_socket.accept()
-    print(f"Connexion reçue de : {address}")
-
-    # L'utilisateur doit accepter la connexion
-    accept_connection = input("Accepter la connexion ? (y/n) : ")
-    if accept_connection.lower() == 'y':
-        conn.send("Connexion acceptée".encode('utf-8'))  # Encode la chaîne en UTF-8
-
-        print("Connexion acceptée. Vous êtes maintenant connectés.")
-    else:
-        conn.send("Connexion acceptée".encode('utf-8'))  # Encode la chaîne en UTF-8
-
-        conn.close()
-        print("Connexion refusée.")
+    print_in_terminal("En attente d'une connexion...")
 
     while True:
-        # Attendre des messages du client
-        message = conn.recv(1024).decode('utf-8')
-        if not message:
-            break
-        print(f"Message reçu: {message}")
-        # Répondre au client
-        response = input("Votre message : ")
-        conn.send(response.encode('utf-8'))
+        # Accepter la connexion d'un client
+        conn, addr = server_socket.accept()
+        threading.Thread(target=handle_client_connection, args=(conn, addr)).start()  # Démarre un thread pour gérer chaque client
 
-    conn.close()  # Fermer la connexion une fois la communication terminée
 
 # Fonction de traitement des commandes
 def handle_command(event):
@@ -105,7 +119,8 @@ def handle_command(event):
     elif "/server/" in command:
         output = "lauching server"
         text_box.insert(tk.END, f"\n{output}\n$ ")
-        threading.Thread(target=server_program)
+        #threading.Thread(target=server_program, args=('notebook', notebook)) 
+        server_program(notebook)
             
     else :
         output = "unknown command"
@@ -148,10 +163,11 @@ def create_second_tab(notebook ):
     # Ajout d'un Text widget dans le deuxième onglet
     text_box_tab2 = tk.Text(second_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 12))
     text_box_tab2.pack(expand=True, fill=tk.BOTH)
-
+    
     # Insertion d'un texte initial dans le deuxième onglet
 
     text_box_tab2.insert(tk.END, "This is the second tab!\n")
+    
 # Fonction principale qui crée la fenêtre
 def main():
     global root, text_box  # On utilise des variables globales pour accéder au terminal et à la fenêtre
