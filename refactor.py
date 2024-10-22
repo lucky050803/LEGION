@@ -4,6 +4,8 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog
 import time
+import random
+import json
 
 # Configuration réseau
 BROADCAST_PORT = 37020
@@ -20,6 +22,9 @@ class App:
         self.client_socket = None
         self.server_socket = None
         self.notebook = None
+        self.command_history = []  # Initialisation de la liste de l'historique des commandes
+        self.history_index = -1 
+        self.current_notepad_file = None
         self.init_ui()
 
     # Initialisation de l'interface utilisateur
@@ -35,16 +40,120 @@ class App:
         self.notebook.add(self.first_tab, text="Terminal")
 
         # Configuration du widget Text pour le terminal
-        self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 12))
+        self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 9))
         self.text_box.pack(expand=True, fill=tk.BOTH)
         self.text_box.bind("<Return>", self.handle_command)
-
+        self.text_box.bind("<Up>", self.navigate_history_up)
+        self.text_box.bind("<Down>", self.navigate_history_down)
+        self.text_box.bind("<Tab>", self.autocomplete_command)
         self.text_box.config(state=tk.NORMAL)
         self.text_box.mark_set("insert", "end-1c")
         self.text_box.focus()
-
+        self.show_legion_intro()
         # Démarrage de la boucle principale de l'application
+        #self.print_in_terminal("-----------------------------------------")
         self.root.mainloop()
+
+    def navigate_history_up(self, event):
+        """Charge la commande précédente dans l'historique lorsque la flèche haut est pressée."""
+        if self.command_history:
+            # Si l'index est au début de l'historique, ne remonte pas plus haut
+            if self.history_index == -1:
+                self.history_index = len(self.command_history) - 1
+            elif self.history_index > 0:
+                self.history_index -= 1
+
+            # Charger la commande correspondante dans la zone de texte
+            self.load_command_from_history()
+
+        return "break"  # Empêche le comportement par défaut de la flèche
+
+    def navigate_history_down(self, event):
+        """Charge la commande suivante dans l'historique lorsque la flèche bas est pressée."""
+        if self.command_history and self.history_index != -1:
+            # Avancer dans l'historique
+            if self.history_index < len(self.command_history) - 1:
+                self.history_index += 1
+            else:
+                self.history_index = -1  # Revient au champ vide s'il n'y a plus de commandes
+
+            # Charger la commande correspondante dans la zone de texte
+            self.load_command_from_history()
+
+        return "break"  # Empêche le comportement par défaut de la flèche
+
+    def load_command_from_history(self):
+        """Charge la commande dans la zone de texte en fonction de l'index de l'historique."""
+        # Supprimer le texte actuel de la zone de texte
+        self.text_box.delete("end-1c linestart", tk.END)
+
+        # Charger la commande actuelle depuis l'historique
+        if self.history_index != -1:
+            self.text_box.insert(tk.END, self.command_history[self.history_index])
+
+
+    def save_command_history(self, command):
+        """Enregistre la commande dans l'historique."""
+        if command:  # N'ajoute pas de commandes vides
+            self.command_history.append(command)
+            self.history_index = -1  # Réinitialise l'index après chaque nouvelle commande
+
+    def show_command_history(self):
+        """Affiche l'historique des commandes."""
+        self.print_in_terminal("Historique des commandes :")
+        for idx, cmd in enumerate(self.command_history, 1):
+            self.print_in_terminal(f"{idx}: {cmd}")
+
+    def show_legion_intro(self):
+
+        # Configuration de l'écran de présentation
+        self.text_box.config(state=tk.NORMAL)  # Permettre l'édition du texte
+        self.text_box.delete(1.0, tk.END)  # Effacer tout le contenu de la zone de texte
+        self.text_box.config(bg="black", fg="green", font=("Courier", 14))  # Changer le style
+
+        # Effet de pluie numérique inspiré de Matrix
+        lines = [
+            "LEGION SYSTEM BOOT",
+            "Initializing ...",
+            "Loading modules ...",
+            "Running diagnostics ...",
+            "LEGION SYSTEM READY"
+        ]
+
+        # Animation de l'effet Matrix
+        for i in range(50):
+            random_line = ''.join(random.choice("01") for _ in range(80))  # Générer une ligne de "pluie"
+            self.text_box.insert(tk.END, random_line + "\n")
+            self.text_box.see(tk.END)
+            self.text_box.update()  # Mettre à jour l'affichage
+            time.sleep(0.05)  # Ajouter un délai pour l'effet d'animation
+
+        # Affichage des messages système
+        for line in lines:
+            self.text_box.insert(tk.END, "\n" + line)
+            self.text_box.see(tk.END)
+            self.text_box.update()
+            time.sleep(1)  # Pause entre les messages
+
+        # Affichage final du titre LEGION
+        final_message = """
+        ==============================================
+        |                WELCOME TO                  |
+        |                                            |
+        |                  LEGION                    |
+        |                                            |
+        |                   ∅  0                     |
+        |                   ____                     |
+        ==============================================
+        """
+        self.text_box.insert(tk.END, final_message)
+        self.text_box.see(tk.END)
+        self.text_box.update()
+
+        time.sleep(3)  # Pause avant de permettre à l'utilisateur de continuer
+        self.text_box.delete(1.0, tk.END)  # Effacer l'écran d'intro pour revenir à l'interface normale
+        
+        self.text_box.see(tk.END)
 
     # Fonction pour afficher des messages dans le terminal
     def print_in_terminal(self, output):
@@ -57,8 +166,6 @@ class App:
         self.util_setup = True
         self.print_in_terminal(f"Nom d'utilisateur : {self.util}")
 
-    # Envoi de fichier
-    import time  # Import pour ajouter des pauses entre les envois
 
     def send_file(self):
         if not self.connected:
@@ -200,6 +307,27 @@ class App:
                 self.print_in_terminal(f"Erreur lors de l'envoi du message : {e}")
         else:
             self.print_in_terminal("Erreur : Vous n'êtes pas connecté à un serveur.")
+    
+    
+    def check_connection_status(self):
+    
+        if self.client_socket is None:
+            self.print_in_terminal("Erreur : Aucun socket n'a été initialisé.")
+            return False
+
+        try:
+            # Tentative d'envoi de données vides pour vérifier si le socket est actif
+            self.client_socket.send(b'')
+            self.print_in_terminal("Le client est toujours connecté.")
+            return True
+
+        except socket.error as e:
+            # Si une exception se produit, cela signifie que le socket n'est plus connecté
+            self.print_in_terminal(f"Erreur de connexion : {e}. Le socket est déconnecté.")
+            self.client_socket.close()  # Fermer le socket pour libérer les ressources
+            self.client_socket = None  # Réinitialiser le socket
+            self.connected = False  # Mettre à jour le statut de connexion
+            return False
 
     # Fonction pour arrêter la conversation
     def quit_conv(self):
@@ -288,52 +416,173 @@ class App:
             s.close()
         return ip
     
-    def save_file_np(self, text_widget):
-        # Ouvre la boîte de dialogue pour sauvegarder le fichier
-        file = filedialog.asksaveasfilename(defaultextension=".*", 
-                                            filetypes=[("All Files", "*.*"), 
-                                                    ("Text Files", "*.txt"), 
-                                                    ("Python Files", "*.py"), 
-                                                    ("HTML Files", "*.html"), 
-                                                    ("Markdown Files", "*.md")])
-        if file:
-            # Récupère le contenu du bloc note et l'écrit dans le fichier choisi
-            with open(file, "w") as file_to_save:
-                file_to_save.write(text_widget.get(1.0, tk.END))  # Sauvegarde le contenu du widget Text
+    def save_file_np(self, text_box):
+        """Sauvegarde le fichier actuellement ouvert, ou demande où sauvegarder si aucun fichier n'est encore ouvert."""
+        if self.current_notepad_file:
+            # Sauvegarder directement sur le fichier ouvert
+            with open(self.current_notepad_file, 'w') as file:
+                file.write(text_box.get(1.0, tk.END))  # Sauvegarder le contenu du widget Text
+            self.print_in_terminal(f"Fichier sauvegardé : {self.current_notepad_file}")
+        else:
+            # Si aucun fichier n'est ouvert, demander où sauvegarder
+            file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+            if file_path:
+                with open(file_path, 'w') as file:
+                    file.write(text_box.get(1.0, tk.END))  # Sauvegarder le contenu du widget Text
+                self.current_notepad_file = file_path  # Mémoriser le chemin du fichier ouvert
+                self.print_in_terminal(f"Fichier sauvegardé : {file_path}")
+            else:
+                self.print_in_terminal("Sauvegarde annulée.")
             
-    def open_file(self, text_widget):
-        file = filedialog.askopenfilename(filetypes=[("All Files", "*.*"), 
-                                                    ("Text Files", "*.txt"), 
-                                                    ("Python Files", "*.py"), 
-                                                    ("HTML Files", "*.html"), 
-                                                    ("Markdown Files", "*.md")])
-        if file:
-            with open(file, "r") as file_to_open:
-                content = file_to_open.read()  # Lire le contenu du fichier
-                text_widget.delete(1.0, tk.END)  # Efface le contenu actuel
-                text_widget.insert(tk.END, content)  # Insère le nouveau contenu
+    def open_file(self, text_box):
+        """Ouvre un fichier et charge son contenu dans la zone de texte Bloc Notes."""
+        file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        if file_path:
+            with open(file_path, 'r') as file:
+                content = file.read()
+                text_box.delete(1.0, tk.END)
+                text_box.insert(tk.END, content)
+            self.current_notepad_file = file_path  # Mémoriser le chemin du fichier ouvert
+            self.print_in_terminal(f"Fichier ouvert : {file_path}")
+        else:
+            self.print_in_terminal("Aucun fichier sélectionné.")
                 
     def create_notepad_tab(self):
-    # Crée un nouvel onglet
+        """Crée un nouvel onglet Bloc Notes avec des boutons pour ouvrir, sauvegarder et fermer l'onglet."""
+        # Créer un nouvel onglet
         notepad_tab = ttk.Frame(self.notebook)
-        self.notebook.add(notepad_tab, text="Bloc Notes")  # Ajoute le nouvel onglet avec un titre "Bloc Notes"
+        self.notebook.add(notepad_tab, text="Bloc Notes")  # Ajoute l'onglet au notebook
 
-    # Ajout d'un widget Text dans cet onglet
+        # Ajout d'un widget Text dans cet onglet
         text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green", font=("Courier", 12))
         text_box_notepad.pack(expand=True, fill=tk.BOTH)
 
-    # Ajout d'un bouton pour ouvrir un fichier
-        open_button = tk.Button(notepad_tab, text="Ouvrir", command=lambda: self.open_file(text_box_notepad))
+        # Frame pour les boutons (en bas de l'onglet)
+        button_frame = tk.Frame(notepad_tab)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+
+        # Bouton pour ouvrir un fichier
+        open_button = tk.Button(button_frame, text="Ouvrir", command=lambda: self.open_file(text_box_notepad), bg="black", fg="green")
         open_button.pack(side=tk.LEFT, padx=5)
 
-    # Ajout d'un bouton pour sauvegarder le fichier
-        save_button = tk.Button(notepad_tab, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad))
+        # Bouton pour sauvegarder le fichier
+        save_button = tk.Button(button_frame, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad), bg="black", fg="green")
         save_button.pack(side=tk.LEFT, padx=5)
-    
-    # Fonction qui gère les commandes utilisateur
+
+        # Bouton pour fermer l'onglet
+        close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="black", fg="green")
+        close_button.pack(side=tk.RIGHT, padx=5)
+        
+        text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
+
+    def close_notepad_tab(self, tab):
+        """Ferme l'onglet Bloc Notes."""
+        try:
+            tab_index = self.notebook.index(tab)
+            self.notebook.forget(tab_index)  # Supprime l'onglet via son index
+        except Exception as e:
+            self.print_in_terminal(f"Erreur lors de la fermeture de l'onglet : {e}")
+
+    def clear(self):
+        
+        self.text_box.config(state=tk.NORMAL)  # Permettre l'édition du texte
+        self.text_box.delete(1.0, tk.END)  # Supprimer tout le texte de la zone
+        # Réinsérer le prompt initial si nécessaire
+        self.text_box.see(tk.END)  # Assurer que la vue défile jusqu'à la fin
+        self.print_in_terminal("Terminal nettoyé.")
+
+
+
+    def autocomplete_command(self, event=None):
+    # Empêcher l'insertion du caractère tab
+          # Supprime le caractère Tab inséré automatiquement
+
+        current_input = self.text_box.get("end-1c linestart", "end-1c").strip()
+        #if event:
+        #    self.text_box.delete("insert-1c")
+        # Liste des commandes disponibles
+        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv"]
+
+        # Chercher une correspondance avec les commandes disponibles
+        matches = [cmd for cmd in available_commands if cmd.startswith(current_input)]
+
+        if len(matches) == 1:  # Une seule correspondance trouvée
+            self.text_box.delete("insert linestart", "insert")  # Supprimer la partie en cours de saisie
+            self.text_box.insert(tk.INSERT, matches[0])
+        elif len(matches) > 1:  # Plusieurs correspondances
+            self.print_in_terminal("Suggestions : " + ", ".join(matches))
+
+        return "break"  # Empêcher le comportement par défaut de la touche Tab
+
+    def run_script(self):
+        """Demande à l'utilisateur de sélectionner un script Python à exécuter, puis l'exécute."""
+        # Demander à l'utilisateur de sélectionner un fichier .py
+        script_path = filedialog.askopenfilename(
+            title="Sélectionner un script Python",
+            filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
+        )
+        
+        if script_path:
+            try:
+                # Lire le contenu du fichier script Python
+                with open(script_path, "r") as script_file:
+                    script_code = script_file.read()
+
+                # Exécuter le script Python
+                exec(script_code)
+                self.print_in_terminal(f"Script '{script_path}' exécuté avec succès.")
+            
+            except Exception as e:
+                self.print_in_terminal(f"Erreur dans le script : {e}")
+        else:
+            self.print_in_terminal("Aucun script sélectionné.")
+            
+            
+    def run_macro(self):
+        """Exécute une suite de commandes depuis un fichier de macros avec l'extension .kfk."""
+        # Demander à l'utilisateur de sélectionner un fichier .kfk
+        macro_path = filedialog.askopenfilename(
+            title="Sélectionner un fichier de macros",
+            filetypes=[("Macro Files", "*.kfk"), ("All Files", "*.*")]
+        )
+
+        if macro_path:
+            try:
+                # Lire le contenu du fichier de macros .kfk
+                with open(macro_path, "r") as macro_file:
+                    commands = macro_file.readlines()
+
+                # Exécuter chaque commande dans le fichier
+                self.print_in_terminal(f"Exécution des macros depuis '{macro_path}'...")
+                for command in commands:
+                    command = command.strip()  # Supprimer les espaces et les sauts de ligne
+                    if command:
+                        self.print_in_terminal(f"Exécution de la commande : {command}")
+                        self.handle_command_direct(command)  # Appeler la méthode pour exécuter la commande
+
+                self.print_in_terminal(f"Macros terminées avec succès depuis '{macro_path}'.")
+
+            except Exception as e:
+                self.print_in_terminal(f"Erreur lors de l'exécution des macros : {e}")
+        else:
+            self.print_in_terminal("Aucun fichier de macros sélectionné.")
+
+    def handle_command_direct(self, command):
+        """Gère directement l'exécution des commandes depuis un fichier de macros."""
+        # Ici, nous passons directement la commande au handler des commandes
+        self.save_command_history(command)  # Sauvegarder la commande dans l'historique
+        # Tu peux personnaliser ici l'exécution des commandes selon les besoins
+        self.return_command(command)
+        # Fonction qui gère les commandes utilisateur
+        
     def handle_command(self, event):
         command = self.text_box.get("end-1c linestart", "end-1c").strip()
-
+        self.save_command_history(command)
+        
+        self.return_command(command)
+        return "break"
+        
+    def return_command(self,command):
         if command.startswith("/user "):
             name = command.split("/user ")[1].strip()
             self.define_util(name)
@@ -349,24 +598,42 @@ class App:
             self.send_msg(command.split("/enva ")[1])
         elif command == "/envf":
             self.send_file()
+            self.print_in_terminal("\n")
         elif command == "/quit_conv":
             self.quit_conv()
+            self.print_in_terminal("\n")
         elif command == "/quit":
             self.root.quit()
+            self.print_in_terminal("\n")
         elif command == "/notepad" :
             self.create_notepad_tab()
+            self.print_in_terminal("\n")
         elif command == "/shutdown":
             self.shutdown_server()  # Appel de la nouvelle fonction pour fermer le serveur
+            self.print_in_terminal("\n")
+        elif command == "/netw":
+            self.check_connection_status()
+            self.print_in_terminal("\n")
+        elif command == "/clear":
+            self.clear()
+            self.print_in_terminal("\n")
+        elif command == "/run_script":
+            self.run_script()
+            self.print_in_terminal("\n")
+        elif command == "/histo":
+            self.show_command_history()
+            self.print_in_terminal("\n")
+        elif command == "/macros":
+            self.run_macro()
         else:
             self.print_in_terminal(f"Commande non reconnue : {command}")
        
-        return "break"
+        
 
 
 # Fonction principale pour démarrer l'application
 def main():
     app = App()
-
 
 if __name__ == "__main__":
     main()
