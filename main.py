@@ -5,29 +5,13 @@ import socket
 import threading
 import socket
 
+
 BROADCAST_PORT = 37020  
 LISTEN_PORT = 8080  
 BROADCAST_ADDRESS = '<broadcast>'
 
-def broadcast_status(ip_address, port):
-    message = f"Utilisateur connecté à {ip_address}:{port}"
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.sendto(message.encode('utf-8'), (BROADCAST_ADDRESS, BROADCAST_PORT))
-        print_in_terminal(f"Diffusion : {message}")
-
-# Fonction pour écouter les diffusions et notifier les utilisateurs de nouvelles connexions
-def listen_for_broadcast():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.bind(('', BROADCAST_PORT))
-        print_in_terminal("En attente de notifications de connexion sur le réseau...")
-
-        while True:
-            data, addr = sock.recvfrom(1024)
-            print_in_terminal(f"Notification de connexion reçue : {data.decode('utf-8')}")
-            
-            
+        
+                   
 # Fonction qui se connecte à un serveur
 def client_program(server_address,server_port):
     global connected
@@ -95,17 +79,21 @@ def handle_client_connection(conn, addr):
     text_box.bind("<Return>", lambda event: accept_connection())
 
     while True:
-        # Attendre des messages du client
         message = conn.recv(1024).decode('utf-8')
         if not message:
             break
         print_in_terminal(f"Message reçu: {message}")
-        # Répondre au client
-        response = input("Votre message : ")
-        conn.send(response.encode('utf-8'))
+        
 
     conn.close()
-
+    
+    
+def define_Util(name):
+    global util
+    util = name
+    util_setup = True
+    print_in_terminal(f"\n Nom d'utilisateur : {util}")
+    
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -131,7 +119,6 @@ def server_program():
     while True:
         # Accepter la connexion d'un client
         conn, addr = server_socket.accept()
-        broadcast_status(ip_address,port)
         threading.Thread(target=handle_client_connection, args=(conn, addr)).start()  # Démarre un thread pour gérer chaque client
 
 
@@ -140,45 +127,41 @@ def handle_command(event):
     rtcommand = text_box.get("end-1c linestart", "end-1c").strip()  # Récupère la dernière ligne de commande
     command = rtcommand.strip()  # Appelle la fonction de traitement des commandes
     
-    if "/exit/" in command:
-        output = "EXITING"
-        text_box.insert(tk.END, f"\n{output}\n")
+    if "/quitte/" in command:
+        output = "fermeture..."
+
         root.quit()  # Quitte l'application si la commande est "exit"
     elif "/help/" in command:
-        output = "Implemented commands : /help/, /TAB/, /exit/ "
-        text_box.insert(tk.END, f"\n{output}\n$ ")  
-    elif "/TAB/" in command:
-        output = "creating second tab..."
-        text_box.insert(tk.END, f"\n{output}\n$ ")
-        create_second_tab(notebook)
+        output = "commandes : "
+         
     elif "/notepad/" in command:
-        output = "creating notepadtab tab..."
+        output = "Ouverture du bloc note."
         text_box.insert(tk.END, f"\n{output}\n$ ")
         create_notepad_tab(notebook)
+        
     elif command.startswith("/connect"):
             # Extraire l'adresse IP et le port
             address_info = command.split("/connect ")[1].split(":")
             ip_address = address_info[0]
             port = int(address_info[1].replace("/", ""))
             threading.Thread(target=client_program, args=(ip_address, port), daemon=True).start()
-            
+    elif "/serv/" in command:
+        output = "lancement du serveur"
 
-            
-    elif "/server/" in command:
-        output = "lauching server"
-        text_box.insert(tk.END, f"\n{output}\n$ ")
         #threading.Thread(target=server_program, args=('notebook', notebook)) 
         #server_program()
         threading.Thread(target=server_program, daemon=True).start()
-    elif "/sendto/" in command:
+    elif "/enva/" in command:
         send_msg(command)
+        print_in_terminal("\n")
+    elif command.startswith("/user"):
+        name = command.split("/user ")[1]
+        name = name[:-1]
+        define_Util(name) 
+        print_in_terminal("\n")
         
-        
-         
-            
     else :
-        output = "unknown command"
-        text_box.insert(tk.END, f"\n{output}\n$ ")
+        output = "commande non reconnue"
     
     text_box.see(tk.END)  # Fait défiler le texte jusqu'à la fin pour voir la nouvelle ligne
     return "break"  # Empêche l'insertion d'un retour à la ligne par défaut
@@ -226,22 +209,11 @@ def create_notepad_tab(notebook):
     save_button = tk.Button(notepad_tab, text="Sauvegarder", command=lambda: save_file(text_box_notepad))
     save_button.pack(side=tk.LEFT, padx=5)
     
-def create_second_tab(notebook ):
-    second_tab = ttk.Frame(notebook)
-    notebook.add(second_tab, text="Terminal")  # Ajoute le deuxième onglet
-
-    # Ajout d'un Text widget dans le deuxième onglet
-    text_box_tab2 = tk.Text(second_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 12))
-    text_box_tab2.pack(expand=True, fill=tk.BOTH)
-    
-    # Insertion d'un texte initial dans le deuxième onglet
-
-    text_box_tab2.insert(tk.END, "This is the second tab!\n")
-    
 # Fonction principale qui crée la fenêtre
 def main():
     global root, text_box  # On utilise des variables globales pour accéder au terminal et à la fenêtre
-
+    global util_setup
+    util_setup = False
     # Création de la fenêtre principale
     root = tk.Tk()
     root.title("LEGION")
@@ -260,7 +232,7 @@ def main():
     text_box.pack(expand=True, fill=tk.BOTH)
 
     # Insertion de l'invite initiale
-    text_box.insert(tk.END, "$ ")
+
 
     # Liage de la touche Entrée à la fonction de traitement de commande
     text_box.bind("<Return>", handle_command)
@@ -272,11 +244,10 @@ def main():
 
     # Création du deuxième onglet
     #create_second_tab(notebook)
-    threading.Thread(target=listen_for_broadcast, daemon=True).start()
+    
     # Démarrage de la boucle principale de l'application
     root.mainloop()
 
 # Appel de la fonction principale
 if __name__ == "__main__":
-    
     main()

@@ -1,0 +1,38 @@
+def broadcast_status(ip_address, port):
+    message = ""
+    if util_setup :
+        message = f"{util} connecté à {ip_address}:{port}"
+    else : 
+        message = f"Utilisateur connecté à {ip_address}:{port}"
+   
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        # Envoie un message en diffusion à tous les utilisateurs du réseau local sur BROADCAST_PORT
+        sock.sendto(message.encode('utf-8'), ('<broadcast>', BROADCAST_PORT))
+        print_in_terminal(f"Diffusion : {message}")
+
+def listen_for_broadcast():
+    # Socket UDP pour écouter les diffusions
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind(('', BROADCAST_PORT))  # Écoute sur le port de diffusion
+        print_in_terminal("En attente de notifications de connexion sur le réseau...")
+
+        while True:
+            # Réception des messages de diffusion
+            data, addr = sock.recvfrom(1024)
+            print_in_terminal(f"Notification de connexion reçue de {addr}: {data.decode('utf-8')}")
+
+
+
+def create_second_tab(notebook ):
+    second_tab = ttk.Frame(notebook)
+    notebook.add(second_tab, text="Terminal")  # Ajoute le deuxième onglet
+
+    # Ajout d'un Text widget dans le deuxième onglet
+    text_box_tab2 = tk.Text(second_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 12))
+    text_box_tab2.pack(expand=True, fill=tk.BOTH)
+    
+    # Insertion d'un texte initial dans le deuxième onglet
+
+    text_box_tab2.insert(tk.END, "This is the second tab!\n")
