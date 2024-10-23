@@ -126,9 +126,9 @@ class App:
         self.left_frame = None
         self.file_explorer = FileExplorer(self)
         self.plugin_manager = PluginManager(self)
-        
+        self.custom_commands = []
         self.commands = CommandsModule(self) 
-        self.custom_commands = {}
+        
         
 
         self.root = tk.Tk()
@@ -704,7 +704,7 @@ class App:
         #if event:
         #    self.text_box.delete("insert-1c")
         # Liste des commandes disponibles
-        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros"]
+        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros"] + self.custom_commands
         # Chercher une correspondance avec les commandes disponibles
         matches = [cmd for cmd in available_commands if cmd.startswith(current_input)]
 
