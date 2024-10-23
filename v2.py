@@ -61,8 +61,6 @@ class FileExplorer:
             parent = self.tree.parent(parent)
         return path
 
-
-
 class CommandsModule:
     def __init__(self, app):
         self.app = app
@@ -77,8 +75,15 @@ class CommandsModule:
         else:
             self.app.print_in_terminal(f"Commande inconnue : {command}")
 
-
-
+    def show_custom_commands(self):
+        """Affiche toutes les commandes personnalisées disponibles."""
+        if not self.app.custom_commands:
+            self.app.print_in_terminal("Aucune commande personnalisée n'a été ajoutée.")
+        else:
+            self.app.print_in_terminal("Commandes personnalisées disponibles :")
+            for command in self.app.custom_commands:
+                self.app.print_in_terminal(f"- {command}")
+                
 class PluginManager:
     def __init__(self, app):
         self.app = app
@@ -109,14 +114,13 @@ class PluginManager:
                 plugin_module.init_plugin(self.app)
         except Exception as e:
             self.app.print_in_terminal(f"Erreur lors du chargement du plugin '{filename}': {e}")
-
-
 # Classe principale de l'application
 class App:
     def __init__(self):
         self.util = "Utilisateur"
         self.util_setup = False
         self.connected = False
+        
         self.client_socket = None
         self.server_socket = None
         self.command_history = []  # Initialisation de la liste de l'historique des commandes
@@ -126,7 +130,7 @@ class App:
         self.left_frame = None
         self.file_explorer = FileExplorer(self)
         self.plugin_manager = PluginManager(self)
-        self.custom_commands = []
+        self.custom_commands = {}
         self.commands = CommandsModule(self) 
         
         
@@ -391,9 +395,6 @@ class App:
                 self.print_in_terminal("Erreur : La connexion a été fermée par l'hôte local.")
             else:
                 self.print_in_terminal(f"Erreur lors de l'envoi du fichier : {e}")
-
-
-
 
     # Fonction pour choisir un répertoire de sauvegarde
     def choose_save_directory(self, file_name):
@@ -704,10 +705,11 @@ class App:
         #if event:
         #    self.text_box.delete("insert-1c")
         # Liste des commandes disponibles
-        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros"] + self.custom_commands
+        
+        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros","/show_custom"]
         # Chercher une correspondance avec les commandes disponibles
         matches = [cmd for cmd in available_commands if cmd.startswith(current_input)]
-
+        
         if len(matches) == 1:  # Une seule correspondance trouvée
             self.text_box.delete("insert linestart", "insert")  # Supprimer la partie en cours de saisie
             self.text_box.insert(tk.INSERT, matches[0])
@@ -779,9 +781,12 @@ class App:
     def handle_command(self, event):
         command = self.text_box.get("end-1c linestart", "end-1c").strip()
         self.save_command_history(command)
+        if ("/") in command :
+            self.return_command(command)
+            return "break"
+        else : 
+            return command
         
-        self.return_command(command)
-        return "break"
         
     def return_command(self,command):
         if command.startswith("/user "):
@@ -829,12 +834,13 @@ class App:
         elif command == "/run_plugin":
             self.run_plugin()
         elif command in self.custom_commands:
-            self.custom_commands[command](self.app)
+            self.custom_commands[command](self)
+        elif command == "/show_custom":
+            self.commands.show_custom_commands()
         else:
             self.print_in_terminal(f"Commande non reconnue : {command}")
        
-
-# Fonction principale pour démarrer l'application
+       # Fonction principale pour démarrer l'application
 def main():
     app = App()
 
