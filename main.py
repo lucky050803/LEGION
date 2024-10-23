@@ -5,36 +5,197 @@ import tkinter as tk
 from tkinter import ttk, filedialog
 import time
 import random
-import json
+import importlib.util
 
-# Configuration réseau
-BROADCAST_PORT = 37020
 LISTEN_PORT = 8080
-BROADCAST_ADDRESS = '<broadcast>'
 
 
+class FileExplorer:
+    def __init__(self, app):
+        self.app = app
+        self.tree = None  # Arborescence des fichiers
+        self.directory = None
+
+    def open_directory(self):
+        """Ouvre une boîte de dialogue pour choisir un répertoire à afficher dans l'explorateur de fichiers."""
+        self.directory = filedialog.askdirectory()
+        if self.directory:
+            self.populate_tree(self.directory)
+            self.directory = os.path.dirname(self.directory)
+                     
+    def populate_tree(self, directory):
+        """Peuple l'arborescence des fichiers avec le contenu du répertoire donné."""
+        if self.tree is None:
+            # Créer l'arborescence (Treeview) seulement si elle n'existe pas
+            self.tree = ttk.Treeview(self.app.file_tree)
+            self.tree.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
+
+            # Configuration des colonnes
+            self.tree.heading("#0", text="Nom", anchor=tk.W)
+            self.tree.bind("<Double-1>", self.on_item_double_click)  # Ouvrir un fichier en double-cliquant
+        else:
+            # Si l'arborescence existe déjà, vider son contenu
+            self.tree.delete(*self.tree.get_children())
+
+        # Remplir l'arborescence avec le nouveau répertoire
+        self.insert_node('', directory)
+
+    def insert_node(self, parent, path):
+        """Ajoute les nœuds d'un répertoire (fichiers et sous-dossiers) dans l'arborescence."""
+        node = self.tree.insert(parent, 'end', text=os.path.basename(path), open=True)
+        if os.path.isdir(path):
+            for item in os.listdir(path):
+                self.insert_node(node, os.path.join(path, item))
+
+    def on_item_double_click(self, event):
+        """Gestion de l'ouverture d'un fichier lorsque l'utilisateur double-clique sur un élément dans l'arborescence."""
+        try:
+            item = self.tree.selection()[0]  # Récupérer l'élément sélectionné
+
+            # Récupérer le chemin complet de l'élément sélectionné
+            file_path = self.get_full_path(item)
+
+            if os.path.isfile(file_path):  # Vérifie si le chemin est bien un fichier
+                self.app.create_project_tab(file_path)  # Ouvrir le fichier dans un onglet Notepad
+            else:
+                print("L'élément sélectionné n'est pas un fichier.")
+        except IndexError:
+            print("Aucun élément sélectionné.")  # Si aucun élément n'est sélectionné
+        except Exception as e:
+            print(f"Erreur lors de l'ouverture du fichier : {e}")  # Gestion des autres erreurs
+       
+    def get_full_path(self, item):
+        """Récupère le chemin complet de l'élément sélectionné dans l'arborescence Treeview en retirant la racine."""
+        path = self.tree.item(item, "text")  # Texte de l'élément sélectionné
+        parent = self.tree.parent(item)  # Récupère le parent de l'élément
+
+        # Remonte dans l'arborescence en ajoutant les parents au chemin, mais ignore la racine
+        while parent:
+            parent_text = self.tree.item(parent, "text")  # Texte du parent
+
+            # Ajoute le parent au chemin, sauf si c'est la racine (self.directory)
+            path = os.path.join(parent_text, path)
+            parent = self.tree.parent(parent)  # Passe au parent suivant (remonte l'arborescence)
+
+        # Le chemin obtenu est relatif à self.directory, donc inutile de l'ajouter à nouveau
+        full_path = os.path.normpath(os.path.join(self.directory, path)).replace("\\", "/")
+
+        print(full_path)  # Affiche le chemin final (pour débogage)
+        return full_path
+
+
+class CommandsModule:
+    def __init__(self, app):
+        self.app = app
+
+    def add_custom_command(self, command_name, callback):
+        """Ajoute une nouvelle commande personnalisée."""
+        self.app.custom_commands[command_name] = callback
+
+    def execute(self, command):
+        if command in self.app.custom_commands:
+            self.app.custom_commands[command](self.app)  # Appeler la commande personnalisée
+        else:
+            self.app.print_in_terminal(f"Commande inconnue : {command}")
+
+    def show_custom_commands(self):
+        """Affiche toutes les commandes personnalisées disponibles."""
+        if not self.app.custom_commands:
+            self.app.print_in_terminal("Aucune commande personnalisée n'a été ajoutée.")
+        else:
+            self.app.print_in_terminal("Commandes personnalisées disponibles :")
+            for command in self.app.custom_commands:
+                self.app.print_in_terminal(f"- {command}")
+
+                
+class PluginManager:
+    def __init__(self, app):
+        self.app = app
+        self.plugins_directory = "plugins"  # Dossier où se trouvent les plugins
+
+    def load_plugins(self):
+        """Charge et exécute tous les plugins présents dans le répertoire des plugins."""
+        if not os.path.exists(self.plugins_directory):
+            os.makedirs(self.plugins_directory)  # Crée le dossier s'il n'existe pas encore
+
+        # Parcourt tous les fichiers .py dans le dossier des plugins
+        for filename in os.listdir(self.plugins_directory):
+            if filename.endswith(".py"):
+                self.load_plugin(filename)
+
+    def load_plugin(self, filename):
+        """Charge un plugin Python à partir d'un fichier."""
+        plugin_path = os.path.join(self.plugins_directory, filename)
+
+        # Charger dynamiquement le module
+        spec = importlib.util.spec_from_file_location(filename[:-3], plugin_path)
+        plugin_module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(plugin_module)
+            self.app.print_in_terminal(f"Plugin '{filename}' chargé avec succès.")
+            # Appel d'une fonction d'initialisation dans le plugin, si elle existe
+            if hasattr(plugin_module, "init_plugin"):
+                plugin_module.init_plugin(self.app)
+        except Exception as e:
+            self.app.print_in_terminal(f"Erreur lors du chargement du plugin '{filename}': {e}")
 # Classe principale de l'application
+
+
 class App:
     def __init__(self):
         self.util = "Utilisateur"
         self.util_setup = False
         self.connected = False
+        
         self.client_socket = None
         self.server_socket = None
-        self.notebook = None
         self.command_history = []  # Initialisation de la liste de l'historique des commandes
         self.history_index = -1 
         self.current_notepad_file = None
-        self.init_ui()
+        self.notebook = None
+        self.left_frame = None
+        self.file_explorer = FileExplorer(self)
+        self.plugin_manager = PluginManager(self)
+        self.custom_commands = {}
+        self.commands = CommandsModule(self) 
+        
+        
 
-    # Initialisation de l'interface utilisateur
-    def init_ui(self):
         self.root = tk.Tk()
         self.root.title("LEGION")
 
-        self.notebook = ttk.Notebook(self.root)
+        # Création de la frame principale avec une disposition en deux colonnes
+        main_frame = tk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Frame pour l'arborescence et les boutons (colonne de gauche)
+        left_frame = tk.Frame(main_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+
+        # Arborescence des fichiers
+        self.file_tree = ttk.Treeview(left_frame)
+        self.file_tree.pack(fill=tk.BOTH, expand=True)
+
+        # Configuration des boutons (en dessous de l'arborescence)
+        open_button = tk.Button(left_frame, text="Ouvrir Explorateur", command=self.file_explorer.open_directory)
+        open_button.pack(fill=tk.X, padx=5, pady=5)
+
+        # Autres boutons (ajoute des boutons supplémentaires si nécessaire)
+        save_button = tk.Button(left_frame, text="Sauvegarder", command=lambda: self.save_file_np(self.text_box))
+        save_button.pack(fill=tk.X, padx=5, pady=5)
+
+        # Frame pour le terminal (colonne de droite)
+        right_frame = tk.Frame(main_frame)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Ajout du notebook dans le frame de droite (qui contient le terminal)
+        self.notebook = ttk.Notebook(right_frame)
         self.notebook.pack(expand=True, fill=tk.BOTH)
 
+
+        self.animation_label = tk.Label(self.left_frame, text="", font=("Courier", 12), fg="black")
+        self.animation_label.pack(padx=5, pady=5)
+        
         # Premier onglet (Terminal)
         self.first_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.first_tab, text="Terminal")
@@ -43,54 +204,92 @@ class App:
         self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 9))
         self.text_box.pack(expand=True, fill=tk.BOTH)
         self.text_box.bind("<Return>", self.handle_command)
-        self.text_box.bind("<Up>", self.navigate_history_up)
-        self.text_box.bind("<Down>", self.navigate_history_down)
         self.text_box.bind("<Tab>", self.autocomplete_command)
         self.text_box.config(state=tk.NORMAL)
         self.text_box.mark_set("insert", "end-1c")
         self.text_box.focus()
+
+        # Afficher l'intro dans le terminal
         self.show_legion_intro()
+        
+        threading.Thread(target=self.start_animation).start()
+        self.plugin_manager.load_plugins()
         # Démarrage de la boucle principale de l'application
-        #self.print_in_terminal("-----------------------------------------")
         self.root.mainloop()
 
-    def navigate_history_up(self, event):
-        """Charge la commande précédente dans l'historique lorsque la flèche haut est pressée."""
-        if self.command_history:
-            # Si l'index est au début de l'historique, ne remonte pas plus haut
-            if self.history_index == -1:
-                self.history_index = len(self.command_history) - 1
-            elif self.history_index > 0:
-                self.history_index -= 1
+    def add_custom_command(self, command_name, callback):
+        """Ajoute une nouvelle commande personnalisée via un plugin."""
+        self.custom_commands[command_name] = callback
+            
+    def run_plugin(self):
+        """Exécute un plugin donné par son nom."""
+        #plugin_file = f"{plugin_name}.py"
+        plugin_file = filedialog.askopenfilename(
+            title="Sélectionner un script Python",
+            filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
+        )
+        plugin_path = os.path.join(self.plugin_manager.plugins_directory, plugin_file)
 
-            # Charger la commande correspondante dans la zone de texte
-            self.load_command_from_history()
+        if os.path.exists(plugin_path):
+            self.plugin_manager.load_plugin(plugin_file)  # Charger le plugin spécifié
+        else:
+            self.print_in_terminal(f"Plugin non trouvé.")
+            
+    def add_explorer_button(self):
+        # Ajout d'un bouton pour ouvrir l'explorateur
+        explorer_button = tk.Button(self.notebook, text="Ouvrir Explorateur", command=self.file_explorer.open_directory)
+        explorer_button.pack(side=tk.TOP)
+    
+    def run(self):
+        self.plugin_manager.load_plugins()  # Charger les plugins lors du démarrage
+        self.ui.setup()
+        self.ui.show_legion_intro()
+        self.ui.run()
 
-        return "break"  # Empêche le comportement par défaut de la flèche
+    def start_animation(self):
+        """Démarre une animation pour afficher progressivement le mot LEGION dans la left_frame et cligner des yeux à la fin."""
+        self.loading_text = "LEGION"
+        self.animation_step = 0
+        self.blinking = False  # Ajoute un état pour gérer le clin d'œil
+        self.animate_legion()
 
-    def navigate_history_down(self, event):
-        """Charge la commande suivante dans l'historique lorsque la flèche bas est pressée."""
-        if self.command_history and self.history_index != -1:
-            # Avancer dans l'historique
-            if self.history_index < len(self.command_history) - 1:
-                self.history_index += 1
-            else:
-                self.history_index = -1  # Revient au champ vide s'il n'y a plus de commandes
+    def animate_legion(self):
+        """Anime le mot LEGION lettre par lettre dans le label, puis fait cligner des yeux le O."""
+        # Incrémente l'étape de l'animation
+        self.animation_step += 1
 
-            # Charger la commande correspondante dans la zone de texte
-            self.load_command_from_history()
+        # Affiche progressivement les lettres du mot LEGION en fonction de l'étape
+        if self.animation_step <= len(self.loading_text):
+            new_text = self.loading_text[:self.animation_step]
+        else:
+            new_text = self.loading_text
 
-        return "break"  # Empêche le comportement par défaut de la flèche
+        # Met à jour le texte dans le label
+        self.animation_label.config(text=new_text)
 
-    def load_command_from_history(self):
-        """Charge la commande dans la zone de texte en fonction de l'index de l'historique."""
-        # Supprimer le texte actuel de la zone de texte
-        self.text_box.delete("end-1c linestart", tk.END)
+        # Continue l'animation jusqu'à ce que le mot complet soit affiché
+        if self.animation_step < len(self.loading_text):
+            self.animation_label.after(500, self.animate_legion)  # Met à jour toutes les 500 ms
+        else:
+            # Une fois l'animation terminée, commence à faire cligner le O
+            self.animation_label.after(500, self.blink_o)  # Lance l'animation de clin d'œil
 
-        # Charger la commande actuelle depuis l'historique
-        if self.history_index != -1:
-            self.text_box.insert(tk.END, self.command_history[self.history_index])
+    def blink_o(self):
+        """Fait cligner des yeux le O dans LEGION en alternant avec ∅."""
+        if not self.blinking:
+            # Remplace O par ∅
+            new_text = self.loading_text.replace("O", "∅")
+            self.blinking = True
+        else:
+            # Remet O à sa place
+            new_text = self.loading_text
+            self.blinking = False
 
+        # Met à jour le label avec le texte modifié
+        self.animation_label.config(text=new_text)
+
+        # Continue à faire cligner des yeux toutes les 500 ms
+        self.animation_label.after(500, self.blink_o)
 
     def save_command_history(self, command):
         """Enregistre la commande dans l'historique."""
@@ -109,19 +308,20 @@ class App:
         # Configuration de l'écran de présentation
         self.text_box.config(state=tk.NORMAL)  # Permettre l'édition du texte
         self.text_box.delete(1.0, tk.END)  # Effacer tout le contenu de la zone de texte
-        self.text_box.config(bg="black", fg="green", font=("Courier", 14))  # Changer le style
+        self.text_box.config(bg="black", fg="green", font=("Courier", 9))  # Changer le style
 
         # Effet de pluie numérique inspiré de Matrix
         lines = [
-            "LEGION SYSTEM BOOT",
-            "Initializing ...",
-            "Loading modules ...",
-            "Running diagnostics ...",
-            "LEGION SYSTEM READY"
+            "DÉMARRAGE DU SYSTÈME LEGION",
+            "Initialisation ...",
+            "Chargement des modules ...",
+            "Exécution des diagnostics ...",
+            "SYSTÈME LEGION PRÊT"
         ]
 
+
         # Animation de l'effet Matrix
-        for i in range(50):
+        for i in range(20):
             random_line = ''.join(random.choice("01") for _ in range(80))  # Générer une ligne de "pluie"
             self.text_box.insert(tk.END, random_line + "\n")
             self.text_box.see(tk.END)
@@ -138,12 +338,7 @@ class App:
         # Affichage final du titre LEGION
         final_message = """
         ==============================================
-        |                WELCOME TO                  |
-        |                                            |
-        |                  LEGION                    |
-        |                                            |
-        |                   ∅  0                     |
-        |                   ____                     |
+        |              |LEGION v1.0|                 |
         ==============================================
         """
         self.text_box.insert(tk.END, final_message)
@@ -165,7 +360,6 @@ class App:
         self.util = name
         self.util_setup = True
         self.print_in_terminal(f"Nom d'utilisateur : {self.util}")
-
 
     def send_file(self):
         if not self.connected:
@@ -222,9 +416,6 @@ class App:
             else:
                 self.print_in_terminal(f"Erreur lors de l'envoi du fichier : {e}")
 
-
-
-
     # Fonction pour choisir un répertoire de sauvegarde
     def choose_save_directory(self, file_name):
         directory = filedialog.askdirectory()  # Ouvre une boîte de dialogue pour choisir le répertoire
@@ -244,7 +435,6 @@ class App:
         else:
             self.print_in_terminal("Erreur : Aucun serveur n'est actuellement en cours d'exécution.")
 
-    # Fonction pour télécharger et sauvegarder le fichier
 # Fonction pour télécharger et sauvegarder le fichier
     def save_file(self, conn, save_path, file_size):
         try:
@@ -277,8 +467,7 @@ class App:
             
         except Exception as e:
             self.print_in_terminal(f"Erreur lors du téléchargement du fichier : {e}")
-
-
+            
     # Fonction pour se connecter à un serveur
     def client_program(self, server_address, server_port):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -307,7 +496,6 @@ class App:
                 self.print_in_terminal(f"Erreur lors de l'envoi du message : {e}")
         else:
             self.print_in_terminal("Erreur : Vous n'êtes pas connecté à un serveur.")
-    
     
     def check_connection_status(self):
     
@@ -446,7 +634,19 @@ class App:
             self.print_in_terminal(f"Fichier ouvert : {file_path}")
         else:
             self.print_in_terminal("Aucun fichier sélectionné.")
-                
+
+    def open_file_in_notepad(self, file_path, text_box):
+        """Ouvre un fichier et charge son contenu dans la zone de texte Bloc Notes."""
+        if file_path:
+            with open(file_path, 'r') as file:
+                content = file.read()
+                text_box.delete(1.0, tk.END)
+                text_box.insert(tk.END, content)
+            self.current_notepad_file = file_path  # Mémoriser le chemin du fichier ouvert
+            self.print_in_terminal(f"Fichier ouvert : {file_path}")
+        else:
+            self.print_in_terminal("Aucun fichier sélectionné.")
+             
     def create_notepad_tab(self):
         """Crée un nouvel onglet Bloc Notes avec des boutons pour ouvrir, sauvegarder et fermer l'onglet."""
         # Créer un nouvel onglet
@@ -454,7 +654,7 @@ class App:
         self.notebook.add(notepad_tab, text="Bloc Notes")  # Ajoute l'onglet au notebook
 
         # Ajout d'un widget Text dans cet onglet
-        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green", font=("Courier", 12))
+        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green", font=("Courier", 9))
         text_box_notepad.pack(expand=True, fill=tk.BOTH)
 
         # Frame pour les boutons (en bas de l'onglet)
@@ -474,7 +674,32 @@ class App:
         close_button.pack(side=tk.RIGHT, padx=5)
         
         text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
+        
+    def create_project_tab(self, file_path):
+        """Crée un nouvel onglet Bloc Notes avec des boutons pour ouvrir, sauvegarder et fermer l'onglet."""
+        # Créer un nouvel onglet
+        notepad_tab = ttk.Frame(self.notebook)
+        self.notebook.add(notepad_tab, text="Projet")  # Ajoute l'onglet au notebook
 
+        # Ajout d'un widget Text dans cet onglet
+        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green", font=("Courier", 9))
+        text_box_notepad.pack(expand=True, fill=tk.BOTH)
+
+        # Frame pour les boutons (en bas de l'onglet)
+        button_frame = tk.Frame(notepad_tab)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+
+        # Bouton pour sauvegarder le fichier
+        save_button = tk.Button(button_frame, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad), bg="black", fg="green")
+        save_button.pack(side=tk.LEFT, padx=5)
+
+        # Bouton pour fermer l'onglet
+        close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="black", fg="green")
+        close_button.pack(side=tk.RIGHT, padx=5)
+        
+        text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
+        self.open_file_in_notepad(file_path, text_box_notepad)
+        
     def close_notepad_tab(self, tab):
         """Ferme l'onglet Bloc Notes."""
         try:
@@ -491,8 +716,6 @@ class App:
         self.text_box.see(tk.END)  # Assurer que la vue défile jusqu'à la fin
         self.print_in_terminal("Terminal nettoyé.")
 
-
-
     def autocomplete_command(self, event=None):
     # Empêcher l'insertion du caractère tab
           # Supprime le caractère Tab inséré automatiquement
@@ -501,11 +724,11 @@ class App:
         #if event:
         #    self.text_box.delete("insert-1c")
         # Liste des commandes disponibles
-        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv"]
-
+        
+        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros","/show_custom","/open_prj"]
         # Chercher une correspondance avec les commandes disponibles
         matches = [cmd for cmd in available_commands if cmd.startswith(current_input)]
-
+        
         if len(matches) == 1:  # Une seule correspondance trouvée
             self.text_box.delete("insert linestart", "insert")  # Supprimer la partie en cours de saisie
             self.text_box.insert(tk.INSERT, matches[0])
@@ -536,7 +759,6 @@ class App:
                 self.print_in_terminal(f"Erreur dans le script : {e}")
         else:
             self.print_in_terminal("Aucun script sélectionné.")
-            
             
     def run_macro(self):
         """Exécute une suite de commandes depuis un fichier de macros avec l'extension .kfk."""
@@ -575,13 +797,16 @@ class App:
         self.return_command(command)
         # Fonction qui gère les commandes utilisateur
         
-    def handle_command(self, event):
+    def handle_command(self, event = None):
         command = self.text_box.get("end-1c linestart", "end-1c").strip()
         self.save_command_history(command)
-        
-        self.return_command(command)
-        return "break"
-        
+        if ("/") in command :
+            self.return_command(command)
+            return "break"
+        else : 
+            print(command)
+            return command
+               
     def return_command(self,command):
         if command.startswith("/user "):
             name = command.split("/user ")[1].strip()
@@ -625,12 +850,19 @@ class App:
             self.print_in_terminal("\n")
         elif command == "/macros":
             self.run_macro()
+        elif command == "/run_plugin":
+            self.run_plugin()
+        elif command in self.custom_commands:
+            self.custom_commands[command](self)
+        elif command == "/show_custom":
+            self.commands.show_custom_commands()
+        elif command == "/open_prj":
+            self.file_explorer.open_directory()
         else:
             self.print_in_terminal(f"Commande non reconnue : {command}")
        
+       # Fonction principale pour démarrer l'application
 
-
-# Fonction principale pour démarrer l'application
 def main():
     app = App()
 
