@@ -157,6 +157,7 @@ class App:
         self.file_explorer = FileExplorer(self)
         self.plugin_manager = PluginManager(self)
         self.custom_commands = {}
+
         self.commands = CommandsModule(self) 
         
         
@@ -201,7 +202,7 @@ class App:
         self.notebook.add(self.first_tab, text="Terminal")
 
         # Configuration du widget Text pour le terminal
-        self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="black", fg="green", insertbackground="white", font=("Courier", 9))
+        self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="black", fg="green", insertbackground="green", font=("Courier", 9))
         self.text_box.pack(expand=True, fill=tk.BOTH)
         self.text_box.bind("<Return>", self.handle_command)
         self.text_box.bind("<Tab>", self.autocomplete_command)
@@ -391,12 +392,13 @@ class App:
 
                     try:
                         # Envoyer les données lues
+                        print("Pas la")
                         sent = self.client_socket.send(file_data)
                         total_sent += sent
-
+                        print("Pas la")
                         # Affichage de la progression de l'envoi
                         self.print_in_terminal(f"Envoi en cours : {total_sent}/{file_size} octets envoyés")
-
+                        print("Pas la")
                         # Ajouter une petite pause pour éviter la surcharge réseau
                         time.sleep(0.01)
 
@@ -416,12 +418,6 @@ class App:
             else:
                 self.print_in_terminal(f"Erreur lors de l'envoi du fichier : {e}")
 
-    # Fonction pour choisir un répertoire de sauvegarde
-    def choose_save_directory(self, file_name):
-        directory = filedialog.askdirectory()  # Ouvre une boîte de dialogue pour choisir le répertoire
-        if directory:
-            return os.path.join(directory, file_name)  # Chemin personnalisé
-        return file_name  # Chemin par défaut (dans le répertoire courant)
     # Fonction pour fermer le serveur proprement
     def shutdown_server(self):
         if self.server_socket:
@@ -544,6 +540,7 @@ class App:
 
         while True:
             try:
+                print("oui")
                 message = conn.recv(1024).decode('utf-8')
                 if not message:
                     break
@@ -551,7 +548,7 @@ class App:
             except:
                 break
         conn.close()
-
+            
     # Fonction pour démarrer le serveur
     def server_program(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -566,32 +563,10 @@ class App:
             conn, addr = self.server_socket.accept()
             self.print_in_terminal(f"Nouvelle connexion depuis {addr}")
 
-            threading.Thread(target=self.handle_client_connection, args=(conn, addr)).start()
-
+            threading.Thread(target=self.handle_client_connection, args=(conn, addr), daemon=True).start()
             # Réception des métadonnées du fichier
-            metadata = conn.recv(1024).decode('utf-8')
-            if metadata.startswith("FILE:"):
-                _, file_name, file_size = metadata.split(":")
-                file_size = int(file_size)
-                self.print_in_terminal(f"Réception proposée : {file_name} ({file_size} octets)")
-
-                # Demander à l'utilisateur s'il veut accepter le fichier
-                self.print_in_terminal(f"Acceptez-vous la réception de {file_name} ? (y/n) : ")
-
-                def confirm_reception(event):
-                    command = self.text_box.get("end-1c linestart", "end-1c").strip()
-                    if command.lower() == 'y':
-                        self.print_in_terminal("Choisissez un chemin de sauvegarde ou utilisez le chemin par défaut.")
-                        save_path = self.choose_save_directory(file_name)
-                        self.save_file(conn, save_path, file_size)
-                    else:
-                        self.print_in_terminal("Réception annulée.")
-                    self.text_box.bind("<Return>", self.handle_command)
-
-                self.text_box.bind("<Return>", confirm_reception)
-            else:
-                self.print_in_terminal("Aucune demande de fichier détectée.")
-
+           
+            
     # Fonction pour récupérer l'adresse IP locale
     def get_local_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -654,7 +629,7 @@ class App:
         self.notebook.add(notepad_tab, text="Bloc Notes")  # Ajoute l'onglet au notebook
 
         # Ajout d'un widget Text dans cet onglet
-        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green", font=("Courier", 9))
+        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green",insertbackground="green", font=("Courier", 9))
         text_box_notepad.pack(expand=True, fill=tk.BOTH)
 
         # Frame pour les boutons (en bas de l'onglet)
@@ -673,6 +648,8 @@ class App:
         close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="black", fg="green")
         close_button.pack(side=tk.RIGHT, padx=5)
         
+      
+        
         text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
         
     def create_project_tab(self, file_path):
@@ -682,7 +659,7 @@ class App:
         self.notebook.add(notepad_tab, text="Projet")  # Ajoute l'onglet au notebook
 
         # Ajout d'un widget Text dans cet onglet
-        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green", font=("Courier", 9))
+        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green",insertbackground="green", font=("Courier", 9))
         text_box_notepad.pack(expand=True, fill=tk.BOTH)
 
         # Frame pour les boutons (en bas de l'onglet)
@@ -725,7 +702,7 @@ class App:
         #    self.text_box.delete("insert-1c")
         # Liste des commandes disponibles
         
-        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/envf", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros","/show_custom","/open_prj"]
+        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros","/show_custom","/open_prj"]
         # Chercher une correspondance avec les commandes disponibles
         matches = [cmd for cmd in available_commands if cmd.startswith(current_input)]
         
@@ -821,9 +798,6 @@ class App:
             self.print_in_terminal("Serveur lancé...")
         elif command.startswith("/enva "):
             self.send_msg(command.split("/enva ")[1])
-        elif command == "/envf":
-            self.send_file()
-            self.print_in_terminal("\n")
         elif command == "/quit_conv":
             self.quit_conv()
             self.print_in_terminal("\n")
