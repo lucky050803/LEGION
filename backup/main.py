@@ -6,13 +6,139 @@ from tkinter import ttk, filedialog
 import time
 import random
 import importlib.util
-from FileE import *
-from plug_manag import *
-from Commands_m import *
-
 
 LISTEN_PORT = 8080
 
+
+class FileExplorer:
+    def __init__(self, app):
+        self.app = app
+        self.tree = None  # Arborescence des fichiers
+        self.directory = None
+
+    def open_directory(self):
+        """Ouvre une boîte de dialogue pour choisir un répertoire à afficher dans l'explorateur de fichiers."""
+        self.directory = filedialog.askdirectory()
+        if self.directory:
+            self.populate_tree(self.directory)
+            self.directory = os.path.dirname(self.directory)
+                     
+    def populate_tree(self, directory):
+        """Peuple l'arborescence des fichiers avec le contenu du répertoire donné."""
+        if self.tree is None:
+            # Créer l'arborescence (Treeview) seulement si elle n'existe pas
+            self.tree = ttk.Treeview(self.app.file_tree)
+            self.tree.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
+
+            # Configuration des colonnes
+            self.tree.heading("#0", text="Nom", anchor=tk.W)
+            self.tree.bind("<Double-1>", self.on_item_double_click)  # Ouvrir un fichier en double-cliquant
+        else:
+            # Si l'arborescence existe déjà, vider son contenu
+            self.tree.delete(*self.tree.get_children())
+
+        # Remplir l'arborescence avec le nouveau répertoire
+        self.insert_node('', directory)
+
+    def insert_node(self, parent, path):
+        """Ajoute les nœuds d'un répertoire (fichiers et sous-dossiers) dans l'arborescence."""
+        node = self.tree.insert(parent, 'end', text=os.path.basename(path), open=True)
+        if os.path.isdir(path):
+            for item in os.listdir(path):
+                self.insert_node(node, os.path.join(path, item))
+
+    def on_item_double_click(self, event):
+        """Gestion de l'ouverture d'un fichier lorsque l'utilisateur double-clique sur un élément dans l'arborescence."""
+        try:
+            item = self.tree.selection()[0]  # Récupérer l'élément sélectionné
+
+            # Récupérer le chemin complet de l'élément sélectionné
+            file_path = self.get_full_path(item)
+
+            if os.path.isfile(file_path):  # Vérifie si le chemin est bien un fichier
+                self.app.create_project_tab(file_path)  # Ouvrir le fichier dans un onglet Notepad
+            else:
+                print("L'élément sélectionné n'est pas un fichier.")
+        except IndexError:
+            print("Aucun élément sélectionné.")  # Si aucun élément n'est sélectionné
+        except Exception as e:
+            print(f"Erreur lors de l'ouverture du fichier : {e}")  # Gestion des autres erreurs
+       
+    def get_full_path(self, item):
+        """Récupère le chemin complet de l'élément sélectionné dans l'arborescence Treeview en retirant la racine."""
+        path = self.tree.item(item, "text")  # Texte de l'élément sélectionné
+        parent = self.tree.parent(item)  # Récupère le parent de l'élément
+
+        # Remonte dans l'arborescence en ajoutant les parents au chemin, mais ignore la racine
+        while parent:
+            parent_text = self.tree.item(parent, "text")  # Texte du parent
+
+            # Ajoute le parent au chemin, sauf si c'est la racine (self.directory)
+            path = os.path.join(parent_text, path)
+            parent = self.tree.parent(parent)  # Passe au parent suivant (remonte l'arborescence)
+
+        # Le chemin obtenu est relatif à self.directory, donc inutile de l'ajouter à nouveau
+        full_path = os.path.normpath(os.path.join(self.directory, path)).replace("\\", "/")
+
+        print(full_path)  # Affiche le chemin final (pour débogage)
+        return full_path
+
+
+class CommandsModule:
+    def __init__(self, app):
+        self.app = app
+
+    def add_custom_command(self, command_name, callback):
+        """Ajoute une nouvelle commande personnalisée."""
+        self.app.custom_commands[command_name] = callback
+
+    def execute(self, command):
+        if command in self.app.custom_commands:
+            self.app.custom_commands[command](self.app)  # Appeler la commande personnalisée
+        else:
+            self.app.print_in_terminal(f"Commande inconnue : {command}")
+
+    def show_custom_commands(self):
+        """Affiche toutes les commandes personnalisées disponibles."""
+        if not self.app.custom_commands:
+            self.app.print_in_terminal("Aucune commande personnalisée n'a été ajoutée.")
+        else:
+            self.app.print_in_terminal("Commandes personnalisées disponibles :")
+            for command in self.app.custom_commands:
+                self.app.print_in_terminal(f"- {command}")
+
+                
+class PluginManager:
+    def __init__(self, app):
+        self.app = app
+        self.plugins_directory = "plugins"  # Dossier où se trouvent les plugins
+
+    def load_plugins(self):
+        """Charge et exécute tous les plugins présents dans le répertoire des plugins."""
+        if not os.path.exists(self.plugins_directory):
+            os.makedirs(self.plugins_directory)  # Crée le dossier s'il n'existe pas encore
+
+        # Parcourt tous les fichiers .py dans le dossier des plugins
+        for filename in os.listdir(self.plugins_directory):
+            if filename.endswith(".py"):
+                self.load_plugin(filename)
+
+    def load_plugin(self, filename):
+        """Charge un plugin Python à partir d'un fichier."""
+        plugin_path = os.path.join(self.plugins_directory, filename)
+
+        # Charger dynamiquement le module
+        spec = importlib.util.spec_from_file_location(filename[:-3], plugin_path)
+        plugin_module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(plugin_module)
+            self.app.print_in_terminal(f"Plugin '{filename}' chargé avec succès.")
+            # Appel d'une fonction d'initialisation dans le plugin, si elle existe
+            if hasattr(plugin_module, "init_plugin"):
+                plugin_module.init_plugin(self.app)
+        except Exception as e:
+            self.app.print_in_terminal(f"Erreur lors du chargement du plugin '{filename}': {e}")
+# Classe principale de l'application
 
 
 class App:
@@ -33,9 +159,11 @@ class App:
         self.custom_commands = {}
 
         self.commands = CommandsModule(self) 
+        
+        
 
         self.root = tk.Tk()
-        self.root.title("L.E.G.I.O.N")
+        self.root.title("LEGION")
 
         # Création de la frame principale avec une disposition en deux colonnes
         main_frame = tk.Frame(self.root)
@@ -54,8 +182,8 @@ class App:
         open_button.pack(fill=tk.X, padx=5, pady=5)
 
         # Autres boutons (ajoute des boutons supplémentaires si nécessaire)
-        #save_button = tk.Button(left_frame, text="Sauvegarder", command=lambda: self.save_file_np(self.text_box))
-        #save_button.pack(fill=tk.X, padx=5, pady=5)
+        save_button = tk.Button(left_frame, text="Sauvegarder", command=lambda: self.save_file_np(self.text_box))
+        save_button.pack(fill=tk.X, padx=5, pady=5)
 
         # Frame pour le terminal (colonne de droite)
         right_frame = tk.Frame(main_frame)
@@ -84,6 +212,8 @@ class App:
 
         # Afficher l'intro dans le terminal
         self.show_legion_intro()
+        
+        threading.Thread(target=self.start_animation).start()
         self.plugin_manager.load_plugins()
         # Démarrage de la boucle principale de l'application
         self.root.mainloop()
@@ -105,7 +235,62 @@ class App:
             self.plugin_manager.load_plugin(plugin_file)  # Charger le plugin spécifié
         else:
             self.print_in_terminal(f"Plugin non trouvé.")
+            
+    def add_explorer_button(self):
+        # Ajout d'un bouton pour ouvrir l'explorateur
+        explorer_button = tk.Button(self.notebook, text="Ouvrir Explorateur", command=self.file_explorer.open_directory)
+        explorer_button.pack(side=tk.TOP)
+    
+    def run(self):
+        self.plugin_manager.load_plugins()  # Charger les plugins lors du démarrage
+        self.ui.setup()
+        self.ui.show_legion_intro()
+        self.ui.run()
 
+    def start_animation(self):
+        """Démarre une animation pour afficher progressivement le mot LEGION dans la left_frame et cligner des yeux à la fin."""
+        self.loading_text = "LEGION"
+        self.animation_step = 0
+        self.blinking = False  # Ajoute un état pour gérer le clin d'œil
+        self.animate_legion()
+
+    def animate_legion(self):
+        """Anime le mot LEGION lettre par lettre dans le label, puis fait cligner des yeux le O."""
+        # Incrémente l'étape de l'animation
+        self.animation_step += 1
+
+        # Affiche progressivement les lettres du mot LEGION en fonction de l'étape
+        if self.animation_step <= len(self.loading_text):
+            new_text = self.loading_text[:self.animation_step]
+        else:
+            new_text = self.loading_text
+
+        # Met à jour le texte dans le label
+        self.animation_label.config(text=new_text)
+
+        # Continue l'animation jusqu'à ce que le mot complet soit affiché
+        if self.animation_step < len(self.loading_text):
+            self.animation_label.after(500, self.animate_legion)  # Met à jour toutes les 500 ms
+        else:
+            # Une fois l'animation terminée, commence à faire cligner le O
+            self.animation_label.after(500, self.blink_o)  # Lance l'animation de clin d'œil
+
+    def blink_o(self):
+        """Fait cligner des yeux le O dans LEGION en alternant avec ∅."""
+        if not self.blinking:
+            # Remplace O par ∅
+            new_text = self.loading_text.replace("O", "∅")
+            self.blinking = True
+        else:
+            # Remet O à sa place
+            new_text = self.loading_text
+            self.blinking = False
+
+        # Met à jour le label avec le texte modifié
+        self.animation_label.config(text=new_text)
+
+        # Continue à faire cligner des yeux toutes les 500 ms
+        self.animation_label.after(500, self.blink_o)
 
     def save_command_history(self, command):
         """Enregistre la commande dans l'historique."""
@@ -128,11 +313,11 @@ class App:
 
         # Effet de pluie numérique inspiré de Matrix
         lines = [
-            "DÉMARRAGE DU SYSTÈME L.E.G.I.O.N.",
+            "DÉMARRAGE DU SYSTÈME LEGION",
             "Initialisation ...",
             "Chargement des modules ...",
             "Exécution des diagnostics ...",
-            "SYSTÈME L.E.G.I.O.N. PRÊT"
+            "SYSTÈME LEGION PRÊT"
         ]
 
 
@@ -154,7 +339,7 @@ class App:
         # Affichage final du titre LEGION
         final_message = """
         ==============================================
-        |             |L.E.G.I.O.N. v1.0|            |
+        |              |LEGION v1.0|                 |
         ==============================================
         """
         self.text_box.insert(tk.END, final_message)
@@ -177,6 +362,62 @@ class App:
         self.util_setup = True
         self.print_in_terminal(f"Nom d'utilisateur : {self.util}")
 
+    def send_file(self):
+        if not self.connected:
+            self.print_in_terminal("Erreur : Vous n'êtes pas connecté à un serveur.")
+            return
+
+        # Sélection du fichier à envoyer
+        file_path = filedialog.askopenfilename()
+        if not file_path:
+            self.print_in_terminal("Erreur : Aucun fichier sélectionné.")
+            return
+
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        self.print_in_terminal(f"Envoi du fichier : {file_name} ({file_size} octets)")
+
+        try:
+            # Envoyer les métadonnées du fichier (nom et taille)
+            self.client_socket.send(f"FILE:{file_name}:{file_size}".encode('utf-8'))
+            
+            with open(file_path, 'rb') as file:
+                total_sent = 0  # Suivi de la progression de l'envoi
+
+                while total_sent < file_size:
+                    # Lire un bloc de données de 1024 octets
+                    file_data = file.read(1024)
+                    if not file_data:
+                        break  # Fin du fichier
+
+                    try:
+                        # Envoyer les données lues
+                        print("Pas la")
+                        sent = self.client_socket.send(file_data)
+                        total_sent += sent
+                        print("Pas la")
+                        # Affichage de la progression de l'envoi
+                        self.print_in_terminal(f"Envoi en cours : {total_sent}/{file_size} octets envoyés")
+                        print("Pas la")
+                        # Ajouter une petite pause pour éviter la surcharge réseau
+                        time.sleep(0.01)
+
+                    except socket.error as e:
+                        self.print_in_terminal(f"Erreur lors de l'envoi des données : {e}")
+                        break
+
+            # Vérification si tout le fichier a été envoyé
+            if total_sent == file_size:
+                self.print_in_terminal(f"Fichier {file_name} envoyé avec succès.")
+            else:
+                self.print_in_terminal(f"Erreur : Seuls {total_sent}/{file_size} octets ont été envoyés.")
+
+        except socket.error as e:
+            if e.errno == 10053:
+                self.print_in_terminal("Erreur : La connexion a été fermée par l'hôte local.")
+            else:
+                self.print_in_terminal(f"Erreur lors de l'envoi du fichier : {e}")
+
     # Fonction pour fermer le serveur proprement
     def shutdown_server(self):
         if self.server_socket:
@@ -191,6 +432,38 @@ class App:
             self.print_in_terminal("Erreur : Aucun serveur n'est actuellement en cours d'exécution.")
 
 # Fonction pour télécharger et sauvegarder le fichier
+    def save_file(self, conn, save_path, file_size):
+        try:
+            with open(save_path, 'wb') as file:
+                received_size = 0
+                while received_size < file_size:
+                    try:
+                        # Vérification si le socket est encore valide avant de recevoir des données
+                        if conn.fileno() == -1:
+                            self.print_in_terminal(f"Le socket a été fermé avant la réception complète.")
+                            break
+                        
+                        file_data = conn.recv(1024)
+                        
+                        # Si aucun fichier reçu, on stoppe
+                        if not file_data:
+                            break
+                        
+                        file.write(file_data)
+                        received_size += len(file_data)
+                    
+                    except socket.error as e:
+                        self.print_in_terminal(f"Erreur lors de la réception des données : {e}")
+                        break
+
+            if received_size == file_size:
+                self.print_in_terminal(f"Fichier {save_path} reçu avec succès.")
+            else:
+                self.print_in_terminal(f"Le fichier n'a pas été complètement reçu. Taille reçue : {received_size}/{file_size}")
+            
+        except Exception as e:
+            self.print_in_terminal(f"Erreur lors du téléchargement du fichier : {e}")
+            
     # Fonction pour se connecter à un serveur
     def client_program(self, server_address, server_port):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -286,13 +559,11 @@ class App:
         self.print_in_terminal(f"Serveur démarré sur l'adresse IP {ip_address} et le port {LISTEN_PORT}")
         self.print_in_terminal("En attente d'une connexion...")
 
-        while self.server_socket != None:
-            if self.server_socket != None :
-                conn, addr = self.server_socket.accept()
-                self.print_in_terminal(f"Nouvelle connexion depuis {addr}")
+        while True:
+            conn, addr = self.server_socket.accept()
+            self.print_in_terminal(f"Nouvelle connexion depuis {addr}")
 
-                threading.Thread(target=self.handle_client_connection, args=(conn, addr), daemon=True).start()
-            
+            threading.Thread(target=self.handle_client_connection, args=(conn, addr), daemon=True).start()
             # Réception des métadonnées du fichier
            
             
@@ -339,7 +610,7 @@ class App:
         else:
             self.print_in_terminal("Aucun fichier sélectionné.")
 
-    def open_file_in_prj(self, file_path, text_box):
+    def open_file_in_notepad(self, file_path, text_box):
         """Ouvre un fichier et charge son contenu dans la zone de texte Bloc Notes."""
         if file_path:
             with open(file_path, 'r') as file:
@@ -404,7 +675,7 @@ class App:
         close_button.pack(side=tk.RIGHT, padx=5)
         
         text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
-        self.open_file_in_prj(file_path, text_box_notepad)
+        self.open_file_in_notepad(file_path, text_box_notepad)
         
     def close_notepad_tab(self, tab):
         """Ferme l'onglet Bloc Notes."""
@@ -420,6 +691,7 @@ class App:
         self.text_box.delete(1.0, tk.END)  # Supprimer tout le texte de la zone
         # Réinsérer le prompt initial si nécessaire
         self.text_box.see(tk.END)  # Assurer que la vue défile jusqu'à la fin
+        self.print_in_terminal("Terminal nettoyé.")
 
     def autocomplete_command(self, event=None):
     # Empêcher l'insertion du caractère tab
@@ -430,7 +702,7 @@ class App:
         #    self.text_box.delete("insert-1c")
         # Liste des commandes disponibles
         
-        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/shutdown", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros","/show_custom","/open_prj"]
+        available_commands = ["/user", "/connect", "/serv", "/clear", "/histo", "/quit", "/enva", "/shutdown", "/macros", "/quit_conv","/netw","/run_script","/run_plugin","/histo","/macros","/show_custom","/open_prj"]
         # Chercher une correspondance avec les commandes disponibles
         matches = [cmd for cmd in available_commands if cmd.startswith(current_input)]
         
@@ -543,6 +815,7 @@ class App:
             self.print_in_terminal("\n")
         elif command == "/clear":
             self.clear()
+            self.print_in_terminal("\n")
         elif command == "/run_script":
             self.run_script()
             self.print_in_terminal("\n")
