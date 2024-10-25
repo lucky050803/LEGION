@@ -1,6 +1,6 @@
 import keyword
 import re
-import os
+
 
 class PythonHelperPlugin:
     def __init__(self, app):
