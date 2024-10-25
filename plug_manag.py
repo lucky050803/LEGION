@@ -2,7 +2,6 @@
 import os
 import importlib.util
 
-
 class PluginManager:
     def __init__(self, app):
         self.app = app

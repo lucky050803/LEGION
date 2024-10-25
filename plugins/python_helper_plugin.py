@@ -78,9 +78,6 @@ class PythonHelperPlugin:
 # Fonction d'enregistrement du plugin dans l'application Legion
 def init_plugin(app):
     plugin = PythonHelperPlugin(app)
-    
-
-    # Lier les fonctionnalités du plugin à des commandes Legion
     app.print_in_terminal("Plugin PythonHelper activé.")
     app.commands.add_custom_command("/suggestions", plugin.provide_suggestions)
     app.commands.add_custom_command("/autocomplete", plugin.auto_complete)

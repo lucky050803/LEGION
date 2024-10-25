@@ -10,10 +10,7 @@ from FileE import *
 from plug_manag import *
 from Commands_m import *
 
-
 LISTEN_PORT = 8080
-
-
 
 class App:
     def __init__(self):
@@ -106,7 +103,6 @@ class App:
         else:
             self.print_in_terminal(f"Plugin non trouvé.")
 
-
     def save_command_history(self, command):
         """Enregistre la commande dans l'historique."""
         if command:  # N'ajoute pas de commandes vides
@@ -190,7 +186,6 @@ class App:
         else:
             self.print_in_terminal("Erreur : Aucun serveur n'est actuellement en cours d'exécution.")
 
-# Fonction pour télécharger et sauvegarder le fichier
     # Fonction pour se connecter à un serveur
     def client_program(self, server_address, server_port):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -221,7 +216,6 @@ class App:
             self.print_in_terminal("Erreur : Vous n'êtes pas connecté à un serveur.")
     
     def check_connection_status(self):
-    
         if self.client_socket is None:
             self.print_in_terminal("Erreur : Aucun socket n'a été initialisé.")
             return False
@@ -295,7 +289,6 @@ class App:
             
             # Réception des métadonnées du fichier
            
-            
     # Fonction pour récupérer l'adresse IP locale
     def get_local_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -376,8 +369,6 @@ class App:
         # Bouton pour fermer l'onglet
         close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="black", fg="green")
         close_button.pack(side=tk.RIGHT, padx=5)
-        
-      
         
         text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
         
