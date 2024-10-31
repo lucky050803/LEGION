@@ -67,8 +67,8 @@ class FileExplorer:
             parent_text = self.tree.item(parent, "text")  # Texte du parent
 
             # Ajoute le parent au chemin, sauf si c'est la racine (self.directory)
-            print("parent txt : ", parent_text)
-            print("self.dir : ",self.directory)
+            #print("parent txt : ", parent_text)
+            #print("self.dir : ",self.directory)
             
             path = os.path.join(parent_text, path)
             parent = self.tree.parent(parent)  # Passe au parent suivant (remonte l'arborescence)
