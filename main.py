@@ -6,7 +6,7 @@ from tkinter import ttk, filedialog
 import time
 import random
 import importlib.util
-from FileE import *
+from FileE import * 
 from plug_manag import *
 from Commands_m import *
 
@@ -63,7 +63,7 @@ class App:
         self.notebook.pack(expand=True, fill=tk.BOTH)
 
 
-        self.animation_label = tk.Label(self.left_frame, text="", font=("Courier", 12), fg="black")
+        self.animation_label = tk.Label(self.left_frame, text="", font=("Courier", 12), fg="white")
         self.animation_label.pack(padx=5, pady=5)
         
         # Premier onglet (Terminal)
@@ -71,7 +71,7 @@ class App:
         self.notebook.add(self.first_tab, text="Terminal")
 
         # Configuration du widget Text pour le terminal
-        self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="black", fg="green", insertbackground="green", font=("Courier", 9))
+        self.text_box = tk.Text(self.first_tab, height=20, width=80, bg="white", fg="black", insertbackground="black", font=("Courier", 9))
         self.text_box.pack(expand=True, fill=tk.BOTH)
         self.text_box.bind("<Return>", self.handle_command)
         self.text_box.bind("<Tab>", self.autocomplete_command)
@@ -120,7 +120,7 @@ class App:
         # Configuration de l'écran de présentation
         self.text_box.config(state=tk.NORMAL)  # Permettre l'édition du texte
         self.text_box.delete(1.0, tk.END)  # Effacer tout le contenu de la zone de texte
-        self.text_box.config(bg="black", fg="green", font=("Courier", 9))  # Changer le style
+        self.text_box.config(bg="white", fg="black", font=("Courier", 9))  # Changer le style
 
         # Effet de pluie numérique inspiré de Matrix
         lines = [
@@ -301,6 +301,16 @@ class App:
             s.close()
         return ip
     
+    def save_under(self, text_box):
+        file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        if file_path:
+            with open(file_path, 'w') as file:
+                file.write(text_box.get(1.0, tk.END))  # Sauvegarder le contenu du widget Text
+            self.current_notepad_file = file_path  # Mémoriser le chemin du fichier ouvert
+            self.print_in_terminal(f"Fichier sauvegardé : {file_path}")
+        else:
+            self.print_in_terminal("Sauvegarde annulée.")
+
     def save_file_np(self, text_box):
         """Sauvegarde le fichier actuellement ouvert, ou demande où sauvegarder si aucun fichier n'est encore ouvert."""
         if self.current_notepad_file:
@@ -351,7 +361,7 @@ class App:
         self.notebook.add(notepad_tab, text="Bloc Notes")  # Ajoute l'onglet au notebook
 
         # Ajout d'un widget Text dans cet onglet
-        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green",insertbackground="green", font=("Courier", 9))
+        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="white", fg="black",insertbackground="black", font=("Courier", 9))
         text_box_notepad.pack(expand=True, fill=tk.BOTH)
 
         # Frame pour les boutons (en bas de l'onglet)
@@ -359,15 +369,18 @@ class App:
         button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
         # Bouton pour ouvrir un fichier
-        open_button = tk.Button(button_frame, text="Ouvrir", command=lambda: self.open_file(text_box_notepad), bg="black", fg="green")
+        open_button = tk.Button(button_frame, text="Ouvrir", command=lambda: self.open_file(text_box_notepad), bg="white", fg="black")
         open_button.pack(side=tk.LEFT, padx=5)
 
         # Bouton pour sauvegarder le fichier
-        save_button = tk.Button(button_frame, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad), bg="black", fg="green")
+        save_button = tk.Button(button_frame, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad), bg="white", fg="black")
         save_button.pack(side=tk.LEFT, padx=5)
 
+        save_button_under = tk.Button(button_frame, text="Sauvegarder sous", command=lambda: self.save_under(text_box_notepad), bg="white", fg="black")
+        save_button_under.pack(side=tk.LEFT, padx=5) 
+
         # Bouton pour fermer l'onglet
-        close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="black", fg="green")
+        close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="white", fg="black")
         close_button.pack(side=tk.RIGHT, padx=5)
         
         text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))
@@ -379,7 +392,7 @@ class App:
         self.notebook.add(notepad_tab, text="Projet")  # Ajoute l'onglet au notebook
 
         # Ajout d'un widget Text dans cet onglet
-        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="black", fg="green",insertbackground="green", font=("Courier", 9))
+        text_box_notepad = tk.Text(notepad_tab, height=20, width=80, bg="white", fg="black",insertbackground="black", font=("Courier", 9))
         text_box_notepad.pack(expand=True, fill=tk.BOTH)
 
         # Frame pour les boutons (en bas de l'onglet)
@@ -387,11 +400,14 @@ class App:
         button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
         # Bouton pour sauvegarder le fichier
-        save_button = tk.Button(button_frame, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad), bg="black", fg="green")
+        save_button = tk.Button(button_frame, text="Sauvegarder", command=lambda: self.save_file_np(text_box_notepad), bg="white", fg="black")
         save_button.pack(side=tk.LEFT, padx=5)
 
+        save_button_under = tk.Button(button_frame, text="Sauvegarder sous", command=lambda: self.save_under(text_box_notepad), bg="white", fg="black")
+        save_button_under.pack(side=tk.LEFT, padx=5) 
+        
         # Bouton pour fermer l'onglet
-        close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="black", fg="green")
+        close_button = tk.Button(button_frame, text="Fermer", command=lambda: self.close_notepad_tab(notepad_tab), bg="white", fg="black")
         close_button.pack(side=tk.RIGHT, padx=5)
         
         text_box_notepad.bind('<Control-s>', lambda event: self.save_file_np(text_box_notepad))

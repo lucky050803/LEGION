@@ -61,17 +61,20 @@ class FileExplorer:
         """Récupère le chemin complet de l'élément sélectionné dans l'arborescence Treeview en retirant la racine."""
         path = self.tree.item(item, "text")  # Texte de l'élément sélectionné
         parent = self.tree.parent(item)  # Récupère le parent de l'élément
-
+        n_parent = self.tree.parent(parent)
         # Remonte dans l'arborescence en ajoutant les parents au chemin, mais ignore la racine
-        while parent:
+        while n_parent:
             parent_text = self.tree.item(parent, "text")  # Texte du parent
 
             # Ajoute le parent au chemin, sauf si c'est la racine (self.directory)
+            print("parent txt : ", parent_text)
+            print("self.dir : ",self.directory)
+            
             path = os.path.join(parent_text, path)
             parent = self.tree.parent(parent)  # Passe au parent suivant (remonte l'arborescence)
-
+            n_parent = self.tree.parent(n_parent)
         # Le chemin obtenu est relatif à self.directory, donc inutile de l'ajouter à nouveau
-        full_path = os.path.normpath(os.path.join(self.directory, path)).replace("\\", "/")
+        full_path = os.path.join(self.directory, path).replace("\\", "/")
 
-        print(full_path)  # Affiche le chemin final (pour débogage)
+        #print(full_path)  # Affiche le chemin final (pour débogage)
         return full_path

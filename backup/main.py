@@ -74,8 +74,9 @@ class FileExplorer:
             parent_text = self.tree.item(parent, "text")  # Texte du parent
 
             # Ajoute le parent au chemin, sauf si c'est la racine (self.directory)
-            path = os.path.join(parent_text, path)
-            parent = self.tree.parent(parent)  # Passe au parent suivant (remonte l'arborescence)
+            if parent != self.directory :
+                path = os.path.join(parent_text, path)
+                parent = self.tree.parent(parent)  # Passe au parent suivant (remonte l'arborescence)
 
         # Le chemin obtenu est relatif à self.directory, donc inutile de l'ajouter à nouveau
         full_path = os.path.normpath(os.path.join(self.directory, path)).replace("\\", "/")
